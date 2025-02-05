@@ -1,66 +1,66 @@
-## Foundry
+# Rebasing Token Wrapper for aUSDC
 
-**Foundry is a blazing fast, portable and modular toolkit for Ethereum application development written in Rust.**
+## Overview
+This project aims to solve the issue of unrealized potential yield in payroll streams by creating a rebasing token wrapper contract for aUSDC. The wrapper enables employers to stream wrapped-aUSDC at a 1:1 value while retaining access to the accrued interest.
 
-Foundry consists of:
+## Functional Requirements
 
--   **Forge**: Ethereum testing framework (like Truffle, Hardhat and DappTools).
--   **Cast**: Swiss army knife for interacting with EVM smart contracts, sending transactions and getting chain data.
--   **Anvil**: Local Ethereum node, akin to Ganache, Hardhat Network.
--   **Chisel**: Fast, utilitarian, and verbose solidity REPL.
+### Token Wrapper
+- **Deposit** aUSDC into the contract to mint wrapped-aUSDC at a 1:1 ratio.
+- **Burn** wrapped-aUSDC to release an equivalent amount of aUSDC to a recipient.
+- **Track and withdraw interest** earned on aUSDC by the contract owner.
 
-## Documentation
+### Streaming Functionality
+- **Allow streaming** of wrapped-aUSDC from an employer to an employee.
+- **Enable employees to claim** their streams, burning wrapped-aUSDC and transferring equivalent aUSDC.
 
-https://book.getfoundry.sh/
+### Interest Withdrawal Mechanism
+- **Employer can withdraw only the interest** accrued from aUSDC balances.
 
-## Usage
+## Technical Requirements
+- Written in **Solidity**, compatible with Ethereum and other EVM chains.
+- Adheres to **ERC-20 standards** for token implementation.
+- Efficient handling of **aUSDC's rebasing nature**.
+- **Gas-efficient** design for both payroll claimants and employers.
 
-### Build
+## Execution Plan
 
-```shell
-$ forge build
-```
+### Technical Implementation
+- Develop a **token wrapper** for aUSDC that enables tracking of rebasing yields.
+- Implement **interest accounting** and withdrawal mechanisms.
+- Design a **streaming function** that ensures seamless payroll distribution and claiming.
+- Ensure **accurate calculations** for rebasing and interest accumulation.
 
-### Test
+### Testing
+- Use **Hardhat, Foundry, or similar tools** for testing.
+- Cover test scenarios including:
+  - **Token minting and burning**
+  - **Payroll streaming and claims**
+  - **Accurate interest calculation and withdrawal**
+  - **Edge cases (rebasing, interest miscalculations, security vulnerabilities)**
 
-```shell
-$ forge test
-```
+### Handover
+- Provide **deployment scripts** and guidance for mainnet and testnet.
+- Deliver clear **documentation**, including:
+  - **Contract interfaces and usage instructions**
+  - **Deployment and integration steps**
+  - **Testing results and known limitations**
 
-### Format
+## Communication and Updates
+- Regular **progress updates** shared with the DAO.
+- Clear **feedback loop** for design and implementation adjustments.
 
-```shell
-$ forge fmt
-```
+## Additional Considerations
+- **Security:** Protect against vulnerabilities such as reentrancy and overflows.
+- **Gas Optimization:** Minimize gas costs for payroll streaming and claims.
+- **Extensibility:** Build the contract in a way that allows future expansion to other yield-bearing tokens.
 
-### Gas Snapshots
+## Bounty Summary
+- **Payout:** $2,500 USD
+- **Deliverables:** Fully tested and documented smart contract(s) with deployment scripts.
 
-```shell
-$ forge snapshot
-```
-
-### Anvil
-
-```shell
-$ anvil
-```
-
-### Deploy
-
-```shell
-$ forge script script/Counter.s.sol:CounterScript --rpc-url <your_rpc_url> --private-key <your_private_key>
-```
-
-### Cast
-
-```shell
-$ cast <subcommand>
-```
-
-### Help
-
-```shell
-$ forge --help
-$ anvil --help
-$ cast --help
-```
+### Success Criteria
+✅ Accurate wrapping/unwrapping of aUSDC and wrapped-aUSDC.
+✅ Functional payroll streaming and seamless claiming workflows.
+✅ Employer access to accrued interest without disrupting streams.
+✅ Comprehensive tests and clear documentation.
