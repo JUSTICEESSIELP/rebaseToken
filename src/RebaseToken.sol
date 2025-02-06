@@ -25,17 +25,17 @@ contract RebaseToken is ERC20, Ownable, AccessControl {
     mapping(address => uint256) private s_userInterestRate; // Keeps track of the interest rate of the user at the time they last deposited, bridged or were transferred tokens.
     mapping(address => uint256) private s_userLastUpdatedTimestamp; // the last time a user balance was updated to mint accrued interest.
     uint256 private s_interestRate = 5e10; // this is the global interest rate of the token - when users mint (or receive tokens via transferral), this is the interest rate they will get.
-
+      uint256 private s_totalAccruedInterest;
 //     /////////////////////
 //     // Events
 //     /////////////////////
     event InterestRateSet(uint256 newInterestRate);
-
+   event InterestAccrued(address indexed user, uint256 amount);
 //     /////////////////////
 //     // Constructor
 //     /////////////////////
 
-    constructor() ERC20("GRTRebased", "GBase") Ownable(msg.sender) { 
+    constructor() ERC20("Wrapped aUSDC", "W-aUSDC") Ownable(msg.sender) { 
 
     }
 //     /////////////////////
@@ -122,6 +122,11 @@ contract RebaseToken is ERC20, Ownable, AccessControl {
         return (currentPrincipalBalance * _calculateUserAccumulatedInterestSinceLastUpdate(_user)) / PRECISION_FACTOR;
     }
 
+
+    function getTotalAccruedInterest() external view returns (uint256) {
+        return s_totalAccruedInterest;
+    }
+
 //     /**
 //      * @dev transfers tokens from the sender to the recipient. This function also mints any accrued interest since the last time the user's balance was updated.
 //      * @param _recipient the address of the recipient
@@ -192,12 +197,19 @@ contract RebaseToken is ERC20, Ownable, AccessControl {
         // Calculate the accrued interest since the last accumulation
         // `balanceOf` uses the user's interest rate and the time since their last update to get the updated balance
         uint256 currentBalance = balanceOf(_user);
-        uint256 balanceIncrease = currentBalance - previousPrincipalBalance;
+        uint256 interestAmount = currentBalance - previousPrincipalBalance;
 
+        
+        if (interestAmount > 0) {
+          s_totalAccruedInterest += interestAmount;
+
+        }
         // Mint an amount of tokens equivalent to the interest accrued
-        _mint(_user, balanceIncrease);
+        _mint(_user, interestAmount);
+         
         // Update the user's last updated timestamp to reflect this most recent time their interest was minted to them.
         s_userLastUpdatedTimestamp[_user] = block.timestamp;
+         emit InterestAccrued(_user, interestAmount);
     }
 
 //     /**

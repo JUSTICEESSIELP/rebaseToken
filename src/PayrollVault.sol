@@ -11,13 +11,18 @@ import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol
 
 contract PayrollVault is AccessControl, ReentrancyGuard {
     // external contract interactions
-     RebaseToken public immutable i_rebaseToken;
-     ERC20 public immutable i_aUsdc;
+    RebaseToken public immutable i_rebaseToken;
+    ERC20 public immutable i_aUsdc;
+
+
+
+
     address private immutable i_employerAddress;
+     uint256 public totalInterestAccrued;
 
     //     // Roles
-    bytes32 public constant PAYROLL_ADMIN_ROLE =
-        keccak256("PAYROLL_ADMIN_ROLE");
+    // bytes32 public constant PAYROLL_ADMIN_ROLE =
+    //     keccak256("PAYROLL_ADMIN_ROLE");
     bytes32 public constant EMPLOYER_AND_STREAM_CONTROLLER_ROLE =
         keccak256("EMPLOYER_AND_STREAM_CONTROLLER_ROLE");
     bytes32 private constant MINT_AND_BURN_ROLE =
@@ -31,6 +36,7 @@ contract PayrollVault is AccessControl, ReentrancyGuard {
         uint256 startTime;
         bool active;
         uint256 claimedTime;
+         uint256 interestRate;
     }
 
     // Tracking streams
@@ -39,6 +45,7 @@ contract PayrollVault is AccessControl, ReentrancyGuard {
     //events
     event Deposit(address indexed user, uint256 amount);
     event Redeem(address indexed user, uint256 amount);
+    event InterestWithdrawn(address indexed employer, uint256 amount);
 
     // Events
     event StreamCreated(
@@ -50,18 +57,26 @@ contract PayrollVault is AccessControl, ReentrancyGuard {
 
     // Errors
     error PayrollVault__aUSDCTransferError();
+    
     error PayrollVault__InvalidStream();
     error PayrollVault__StreamAlreadyExists();
     error PayrollVault__InsufficientStreamBalance();
-     error PayrollVault__EmployerBalanceIsLow();
+    error PayrollVault__EmployerBalanceIsLow();
     error PayrollVault__RedeemFailed();
-   
+    error PayrollVault__InsufficientEmployerInterest();
 
     using SafeERC20 for IERC20;
 
-    constructor(address _rebaseToken, address _aUsdc) {
+    constructor(
+        address _rebaseToken,
+        address _aUsdc,
+        address _employeeAddress
+    ) {
         i_rebaseToken = RebaseToken(_rebaseToken);
         i_aUsdc = ERC20(_aUsdc);
+        i_employerAddress = _employeeAddress;
+        _grantRole(EMPLOYER_AND_STREAM_CONTROLLER_ROLE, _employeeAddress);
+        _grantRole(MINT_AND_BURN_ROLE, address(this));
     }
 
     // allows the contract to receive rewards
@@ -83,6 +98,7 @@ contract PayrollVault is AccessControl, ReentrancyGuard {
             revert PayrollVault__EmployerBalanceIsLow();
         }
 
+uint256 currentInterestRate = i_rebaseToken.getInterestRate();
         // Create stream
         streams[_employee] = PayrollStream({
             sender: msg.sender,
@@ -90,13 +106,13 @@ contract PayrollVault is AccessControl, ReentrancyGuard {
             amount: _amount,
             startTime: block.timestamp,
             active: true,
-            claimedTime: block.timestamp
+            claimedTime: block.timestamp,
+            interestRate:currentInterestRate
         });
 
         employerBalance[msg.sender] -= _amount;
         // Initiate token stream
-rebaseMint(_employee, _amount, i_rebaseToken.getInterestRate());
-     
+        rebaseMint(_employee, _amount, i_rebaseToken.getInterestRate());
 
         emit StreamCreated(msg.sender, _employee, _amount);
     }
@@ -104,7 +120,7 @@ rebaseMint(_employee, _amount, i_rebaseToken.getInterestRate());
     /**
      * @notice Allow recipient to claim their stream
      */
-    function claimStream() external {
+    function claimStream() external nonReentrant {
         PayrollStream storage stream = streams[msg.sender];
 
         if (!stream.active) {
@@ -121,6 +137,7 @@ rebaseMint(_employee, _amount, i_rebaseToken.getInterestRate());
         // Update claimed amounts
 
         stream.claimedTime = block.timestamp;
+        stream.active = false;
         // Unwrap tokens for recipient
         // i_aUsdc.unwrap(claimableAmount);
 
@@ -128,19 +145,17 @@ rebaseMint(_employee, _amount, i_rebaseToken.getInterestRate());
         emit StreamClaimed(msg.sender, claimableAmount);
     }
 
-    function deposit(uint256 _amount) external {
-
+    function deposit(uint256 _amount) external nonReentrant {
         require(
-    i_aUsdc.allowance(msg.sender, address(this)) >= _amount,
-    "ERC20: transfer amount exceeds allowance"
-);
+            i_aUsdc.allowance(msg.sender, address(this)) >= _amount,
+            "ERC20: transfer amount exceeds allowance"
+        );
         // // Transfer tokens
 
         if (!i_aUsdc.transferFrom(msg.sender, address(this), _amount)) {
-    revert PayrollVault__aUSDCTransferError();
-}
+            revert PayrollVault__aUSDCTransferError();
+        }
 
-   
         // get the current interest rate tied to the deposit
         uint256 users_interestRate = i_rebaseToken.getInterestRate();
 
@@ -150,13 +165,34 @@ rebaseMint(_employee, _amount, i_rebaseToken.getInterestRate());
         emit Deposit(msg.sender, _amount);
     }
 
-    function rebaseMint(address _to, uint256 _amount, uint256 _interest_rate) internal {
-        i_rebaseToken.mint(_to, _amount, _interest_rate);
+    function rebaseMint(
+        address _to,
+        uint256 _amount,
+        uint256 _interest_rate
+    ) internal {
+        i_rebaseToken.mint(_to, _amount, _interest_rate, MINT_AND_BURN_ROLE);
     }
 
-    function rebaseBurn(address _from, uint256 _amount ) internal {
-        i_rebaseToken.burn(_from, _amount);
+    function rebaseBurn(address _from, uint256 _amount) internal {
+        i_rebaseToken.burn(_from, _amount, MINT_AND_BURN_ROLE);
     }
+
+      function withdrawInterest() external onlyRole(EMPLOYER_AND_STREAM_CONTROLLER_ROLE) nonReentrant {
+        uint256 totalInterest = i_rebaseToken.getTotalAccruedInterest();
+        if (totalInterest == 0) revert PayrollVault__InsufficientEmployerInterest();
+
+        uint256 withdrawableInterest = totalInterest - totalInterestAccrued;
+        totalInterestAccrued = totalInterest;
+
+        bool success = i_aUsdc.transfer(msg.sender, withdrawableInterest);
+        if (!success)  revert PayrollVault__aUSDCTransferError();
+    
+
+
+        emit InterestWithdrawn(msg.sender, withdrawableInterest);
+    }
+
+
     /**
      * @dev redeems rebase token for the underlying asset
      * @param _amount the amount being redeemed
@@ -166,7 +202,9 @@ rebaseMint(_employee, _amount, i_rebaseToken.getInterestRate());
         if (_amount == type(uint256).max) {
             _amount = i_rebaseToken.balanceOf(msg.sender);
         }
-        i_rebaseToken.burn(msg.sender, _amount);
+        // uint256 users_interestRate = i_rebaseToken.getInterestRate();
+
+        rebaseBurn(msg.sender, _amount);
         // executes redeem of the underlying asset
 
         if (!i_aUsdc.transferFrom(address(this), msg.sender, _amount)) {
